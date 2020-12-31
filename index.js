@@ -8,6 +8,8 @@ const erc20Json = require('./build/contracts/ERC20Interface.json')
 
 require('dotenv').config()
 
+LATEST_FROM_BLOCKS = process.env.LATEST_FROM_BLOCKS || 1000
+
 var app = express()
 app.use(express.json())
 app.set('json spaces', 2)
@@ -20,7 +22,8 @@ app.use(express.static('web'))
 var erc20Portal, bridgeableToken, erc20
 
 app.listen(process.env.PORT, async () => {
-    console.log('Welcome to TokenPortal')
+    console.log('Welcome to Token Bridge 0.1 alpha')
+    console.log('Running on http://127.0.0.1:' + process.env.PORT)
     homeWeb3.setProvider(process.env.HOME_ETHEREUM_PROVIDER_URL)
     foreignWeb3.setProvider(process.env.FOREIGN_ETHEREUM_PROVIDER_URL)
     erc20Portal = new foreignWeb3.eth.Contract(erc20PortalJson.abi, process.env.FOREIGN_PORTAL_CONTRACT)
@@ -42,24 +45,29 @@ app.get('/', function(request, response) {
 
 app.get('/transactions/:address', asyncMiddleware(async (request, response, next) => {
 
+    var latest = await foreignWeb3.eth.getBlockNumber()
+    var latestFrom = latest - LATEST_FROM_BLOCKS
     let foreignEnterlogs = await erc20Portal.getPastEvents('EnterBridgeEvent', {
         filter: { from: request.params.address },
-        fromBlock: 0,
+        fromBlock: latestFrom,
         toBlock: 'latest'
     })
     let foreignExitlogs = await erc20Portal.getPastEvents('ExitBridgeEvent', {
         filter: { from: request.params.address },
-        fromBlock: 0,
+        fromBlock: latestFrom,
         toBlock: 'latest'
     })
+
+    latest = await homeWeb3.eth.getBlockNumber()
+    latestFrom = latest - LATEST_FROM_BLOCKS
     let homeEnterLogs = await bridgeableToken.getPastEvents('EnterBridgeEvent', {
         filter: { from: request.params.address },
-        fromBlock: 0,
+        fromBlock: latestFrom,
         toBlock: 'latest'
     })
     let homeExitLogs = await bridgeableToken.getPastEvents('ExitBridgeEvent', {
         filter: { from: request.params.address },
-        fromBlock: 0,
+        fromBlock: latestFrom,
         toBlock: 'latest'
     })
 
@@ -161,6 +169,6 @@ function hashFunction(from, txnHash, foreignAddress, amount) {
 function getValidatorSignature(payload) {
     let web3 = homeWeb3
     // signed by the verifier
-    var sig = web3.eth.accounts.sign(payload, '0x' + process.env.PRIVATE_KEY, true)
+    var sig = web3.eth.accounts.sign(payload, process.env.PRIVATE_KEY, true)
     return sig.signature
 }
